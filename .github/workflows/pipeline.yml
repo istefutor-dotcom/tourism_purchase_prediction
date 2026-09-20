@@ -1,0 +1,74 @@
+name: Tourism Purchase CI CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  HF_DATASET_REPO: ${{ secrets.HF_DATASET_REPO }}
+  HF_MODEL_REPO: ${{ secrets.HF_MODEL_REPO }}
+  HF_SPACE_REPO: ${{ secrets.HF_SPACE_REPO }}
+
+jobs:
+  register-dataset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r tourism_project/requirements.txt
+      - run: python tourism_project/model_building/data_register.py
+
+  data-preparation:
+    needs: register-dataset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r tourism_project/requirements.txt
+      - run: python tourism_project/model_building/prep.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: processed-tourism-data
+          path: tourism_project/data/processed/*.csv
+
+  model-training:
+    needs: data-preparation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r tourism_project/requirements.txt
+      - name: Start MLflow server
+        run: |
+          nohup mlflow ui --host 0.0.0.0 --port 5000 &
+          sleep 5
+      - run: python tourism_project/model_building/train.py
+      - name: Preserve MLflow history
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlflow-runs
+          path: mlruns
+          if-no-files-found: ignore
+
+  deploy-space:
+    needs: model-training
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install huggingface_hub==0.31.0
+      - run: python tourism_project/deployment/push_to_space.py
