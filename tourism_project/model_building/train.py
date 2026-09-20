@@ -65,7 +65,7 @@ xgb_model = xgb.XGBClassifier(
     objective="binary:logistic",
     eval_metric="logloss",
     random_state=42,
-    n_jobs=-1,
+    n_jobs=1,
     scale_pos_weight=class_ratio,
 )
 
@@ -82,7 +82,7 @@ with mlflow.start_run(run_name="xgboost-grid-search"):
         model_pipeline,
         param_grid,
         cv=cv,
-        n_jobs=-1,
+        n_jobs=1,
         scoring="f1",
         refit=True,
     )
